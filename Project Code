@@ -1,0 +1,154 @@
+import numpy as np
+
+print("\nShaft torsion calculation\n")
+# Units:
+# Length → meters (m)
+# Stress → Pascals (Pa)
+# Alpha → rad/m
+# Torque → N·m
+
+# taking input
+R = float(input("Enter radius: "))
+L = float(input("Enter length: "))
+alpha = float(input("Enter twist per length: "))
+
+print("\nGive a point inside shaft")
+r = float(input("r: "))
+theta = float(input("theta (rad): "))
+z = float(input("z: "))
+
+# converting to cartesian
+X = r * np.cos(theta)
+Y = r * np.sin(theta)
+Z = z
+
+print("\nOriginal point:")
+print(X, Y, Z)
+
+# after deformation (twist)
+x = X * np.cos(alpha*Z) - Y * np.sin(alpha*Z)
+y = X * np.sin(alpha*Z) + Y * np.cos(alpha*Z)
+z_new = Z
+
+print("\nAfter deformation:")
+print(x, y, z_new)
+
+# displacement
+ux = x - X
+uy = y - Y
+uz = z_new - Z
+
+print("\nDisplacement:")
+print(ux, uy, uz)
+
+# deformation gradient
+F = np.array([
+    [np.cos(alpha*Z), -np.sin(alpha*Z), -alpha*y],
+    [np.sin(alpha*Z),  np.cos(alpha*Z),  alpha*x],
+    [0, 0, 1]
+])
+
+print("\nF matrix:")
+print(F)
+
+J = np.linalg.det(F)
+print("\nJ =", J)
+
+# strain calculation
+I = np.eye(3)
+grad_u = F - I
+
+eps = 0.5 * (grad_u + grad_u.T)
+
+C = F.T @ F
+E = 0.5 * (C - I)
+
+# material
+E_mod = float(input("\nEnter Young modulus: "))
+nu = float(input("Enter poisson ratio: "))
+
+lam = (E_mod * nu)/((1+nu)*(1-2*nu))
+mu = E_mod/(2*(1+nu))
+
+# stress (small strain)
+sigma1 = lam*np.trace(eps)*np.eye(3) + 2*mu*eps
+
+# stress (finite)
+S = lam*np.trace(E)*np.eye(3) + 2*mu*E
+sigma2 = (1/J) * F @ S @ F.T
+
+print("\nStress (small):")
+print(sigma1)
+
+print("\nStress (finite):")
+print(sigma2)
+
+# directions
+e_theta = np.array([-np.sin(theta), np.cos(theta), 0])
+e_z = np.array([0,0,1])
+
+# shear stress
+tau1 = e_z @ sigma1 @ e_theta
+tau2 = e_z @ sigma2 @ e_theta
+
+print("\nShear stress:")
+print("Model1:", tau1)
+print("Model2:", tau2)
+
+# axial
+print("\nAxial stress:")
+print("Model1:", sigma1[2,2])
+print("Model2:", sigma2[2,2])
+
+# ---- torque ----
+gp = [-np.sqrt(3/5), 0, np.sqrt(3/5)]
+w  = [5/9, 8/9, 5/9]
+
+T1 = 0
+T2 = 0
+
+for i in range(3):
+    for j in range(3):
+
+        r_val = (R/2)*(gp[i]+1)
+        th_val = np.pi*(gp[j]+1)
+
+        Xg = r_val*np.cos(th_val)
+        Yg = r_val*np.sin(th_val)
+        Zg = Z
+
+        xg = Xg*np.cos(alpha*Zg) - Yg*np.sin(alpha*Zg)
+        yg = Xg*np.sin(alpha*Zg) + Yg*np.cos(alpha*Zg)
+
+        Fg = np.array([
+            [np.cos(alpha*Zg), -np.sin(alpha*Zg), -alpha*yg],
+            [np.sin(alpha*Zg),  np.cos(alpha*Zg),  alpha*xg],
+            [0,0,1]
+        ])
+
+        Jg = np.linalg.det(Fg)
+
+        grad = Fg - np.eye(3)
+        eps_g = 0.5*(grad + grad.T)
+
+        Cg = Fg.T @ Fg
+        Eg = 0.5*(Cg - np.eye(3))
+
+        sig1 = lam*np.trace(eps_g)*np.eye(3) + 2*mu*eps_g
+        Sg = lam*np.trace(Eg)*np.eye(3) + 2*mu*Eg
+        sig2 = (1/Jg)*Fg @ Sg @ Fg.T
+
+        e_th = np.array([-np.sin(th_val), np.cos(th_val), 0])
+        e_zg = np.array([0,0,1])
+
+        s1 = e_zg @ sig1 @ e_th
+        s2 = e_zg @ sig2 @ e_th
+
+        Jmap = (R/2)*np.pi
+
+        T1 += w[i]*w[j]*(r_val**2 * s1)*Jmap
+        T2 += w[i]*w[j]*(r_val**2 * s2)*Jmap
+
+print("\nTorque:")
+print("Model1:", T1)
+print("Model2:", T2)
